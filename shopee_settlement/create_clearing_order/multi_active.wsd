@@ -1,0 +1,39 @@
+@startuml
+autonumber
+
+title process dup-key error
+
+participant AS as AS
+participant CS as CS
+database "unit0 database" as DB0
+database "unit1 database" as DB1
+actor alerter as alerter
+
+CS -> DB0++: select clearing_order_id from clearing_reference_mapping_tab where reference_id = <reference_id>
+return result
+
+OPT result == error
+    CS -> AS: 400
+ELSE clearing_reference_mapping not found
+    CS -> alerter++: alert
+    return:
+    CS -> AS: 400
+ELSE clearing_reference_mapping found
+    CS -> DB0++: select * from clearing_order_tab where clearing_order_id = <clearing_order_id>
+    return result
+
+    OPT result = error
+        CS -> AS: 400
+    ELSE clearing_order not found
+        CS -> alerter++: alert
+        return:
+        CS -> AS: 400
+    ELSE clearing_order found
+        OPT clearing_order from db doesn't match request order
+            CS -> AS: 400
+        END
+	 	CS -> AS: 200
+    END
+END
+
+@enduml

@@ -1,0 +1,53 @@
+@startuml
+autonumber
+
+title create clearing order
+
+participant AS as AS
+participant CS as CS
+database "unit0 database" as DB0
+database "unit1 database" as DB1
+actor alerter as alerter
+
+AS -> CS ++: create clearing orders
+
+    CS -> DB0++: insert into clearing_order_gid_tab
+    return: clearing_order_gid
+    CS -> CS: generate clearing_order_id
+
+    OPT if toggle enabled
+        CS -> DB1++: insert into clearing_reference_mapping_tab (reference_id, clearing_order_id=0)
+        return: result
+
+        note left: if result is non dup-key error\nignore it and continue to insert uint0\nthis is to keep create_clearing_order available in case uint1 is down
+        OPT result == dup-key error
+            CS -> CS: process dup-key error
+            CS -> AS: result
+        END
+    END
+
+	group #LightBlue transaction
+    CS -> DB0++: insert into clearing_reference_mapping_tab (reference_id, clearing_order_id)
+    return: result
+
+    OPT result == dup-key error
+        CS -> CS: process dup-key error
+        CS -> AS: result
+    ELSE result = success
+        CS -> DB0++: insert into clearing_order_tab (clearing_order_id)
+        return: success
+
+        OPT result == success
+            CS -> AS: 200
+        ELSE result == dup-key error
+            CS -> alerter++: alert
+            return:
+        END
+    END
+    end group
+
+    CS -> DB1++: delete from clearing_reference_mapping_tab where reference_id = <reference_id>
+    return success
+    CS -> AS: 400
+
+@enduml

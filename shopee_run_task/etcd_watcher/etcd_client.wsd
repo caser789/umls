@@ -1,0 +1,56 @@
+@startuml
+autonumber
+
+title etcd_client APIs
+
+participant EtcdClient as c
+participant EtcdServer as s
+
+c -> s: write('name', 'jiao')
+note left: set('name', 'jiao')
+s -> c:
+
+c -> s: read('name')
+note left: get('name')
+s -> c: 'jiao'
+
+c -> s: delete('name')
+note left: delete('name')
+s -> c:
+
+c -> s: read('dir_name', recursive=True, sorted=True)
+note left: get_dir_items('dir_name')
+s -> c: {"aa": "1", "aa/bb": "2", "aa/bb/cc": "3"}
+
+== watcher ==
+
+c -> s: read('/etcd_watcher', recursive=True, sorted=True)
+note left: get_watcher_items()
+s -> c: {"/etcd_watcher": "1", "etcd_watcher/bb": "2", "etcd_watcher/bb/cc": "3"}
+
+c -> s: read('/etcd_watcher', recursive=True, sorted=True)
+note left: get_watcher_keys()
+s -> c: ["/etcd_watcher", "etcd_watcher/bb", "etcd_watcher/bb/cc"]
+
+== master ==
+
+c -> s: write('/etcd_watcher/master', 'hostname', TTL, prevExist=False)
+note left: create_master
+s -> c:
+
+c -> s: read('/etcd_watcher/master')
+note left: get_master
+s -> c: 'hostname'
+
+c -> s: write('/etcd_watcher/master', 'hostname', TTL, prevExist=True, prevValue='hostname')
+note left: update_master
+s -> c:
+
+== node ==
+
+c -> s: read('/etcd_watcher/master')
+note left: get_node_type
+s -> c: 'hostname'
+c --> c: MASTER if 'hostname' == my hostname else SLAVE
+
+@enduml
