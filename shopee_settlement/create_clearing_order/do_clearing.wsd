@@ -1,0 +1,59 @@
+@startuml
+autonumber
+
+title trigger clearing
+
+participant Client as Client
+participant CS as CS
+database clearing_order_tab
+database pending_settlement_order_tab
+database pending_settlement_target_tab
+participant merchant_shared_service as MSS
+participant merchant_wallet_engine as MWE
+participant promotion_service as PS
+
+Client -> CS: do clearing
+note over clearing_order_tab: init
+CS -> clearing_order_tab: get clearing order by clearing_order_id
+CS <- clearing_order_tab: clearing order
+CS -> MSS: get store details
+CS <- MSS: store details (settle config)
+CS -> MSS: get merchant details
+CS <- MSS: merchant details (mdr config + settle config)
+CS --> CS: fix settle to merchant
+alt settle to merchant host
+CS -> MSS: get merchant (host) details
+CS <- MSS: merchant (host) details (mdr config + settle config)
+end alt
+CS -> clearing_order_tab: update status from init to accounted_processing
+CS <- clearing_order_tab: ok
+note over clearing_order_tab: accounted_processing
+CS -> MWE: create payment clearing transaction
+CS <- MWE: ok
+CS -> clearing_order_tab: update status from accounted_processing to accounted_complete
+CS <- clearing_order_tab: ok
+note over clearing_order_tab: accounted_complete
+
+CS --> CS: get settle time
+CS -> PS: get merchant funding details
+CS <- PS: merchant funding details
+CS --> CS: get settlement fees
+
+group #LightBlue transaction
+CS -> clearing_order_tab: update to clearing_complete
+CS <- clearing_order_tab: ok
+alt realtime
+CS -> pending_settlement_order_tab: insert
+CS <- pending_settlement_order_tab: ok
+else not realtime
+CS -> pending_settlement_target_tab: list by entity
+CS <- pending_settlement_target_tab: settle targets
+alt  no settle targets
+CS -> pending_settlement_target_tab: insert
+CS <- pending_settlement_target_tab: ok
+end
+end alt
+note over clearing_order_tab: clearing_complete
+end group
+Client <- CS: do clearing result
+@enduml

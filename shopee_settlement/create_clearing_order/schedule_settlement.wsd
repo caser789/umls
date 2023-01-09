@@ -1,0 +1,87 @@
+@startuml
+autonumber
+
+title schedule settlement
+
+participant CS as CS
+database pending_settlement_target_tab
+database failed_clearing_order_tab
+database clearing_order_tab
+database settlement_order_tab
+database settlement_clearing_mapping_tab
+
+CS -> pending_settlement_target_tab: find settlement targets
+note over pending_settlement_target_tab
+SELECT
+    *
+FROM
+    pending_settlement_target_tab
+WHERE
+    settlement_trx_type = x AND
+    planned_settlement_time < y
+end note
+CS <- pending_settlement_target_tab: pending settlement targets
+
+note left CS: why not group: 跨 shard 找 clearing order 不方便
+
+loop for each settlement target
+CS -> failed_clearing_order_tab: find failed clearing order result
+note over failed_clearing_order_tab
+SELECT
+    *
+FROM
+    failed_clearing_order_tab
+WHERE
+    service_id = 1 AND
+    clearing_entity_id = x AND
+    clearing_entity_type = y AND
+    order_complete_time < 0 of today AND
+    order_complete_time >= 0 of yesterday AND
+    order_type = Payment
+end note
+CS <- failed_clearing_order_tab: find failed clearing order result
+
+CS -> clearing_order_tab: find clearing orders
+note over clearing_order_tab
+SELECT
+    *
+FROM
+    clearing_order_tab
+WHERE
+    status = clearing completed AND
+    merchant_migrated = true AND
+    settlement_order_id = 0 AND
+    service_id = 1 AND
+    order_type = payment AND
+    order_complete_time > x AND
+    order_complete_time < ? AND
+    clearing_entity_id = ? AND
+    clearing_entity_type = ? AND
+    settlement_target_id = ? AND
+    settlement_target_type = ? AND
+    settlement_cycle = ? AND
+    planned_settlement_time < now
+end note
+CS <- clearing_order_tab: clearing orders
+
+loop for every 100000 clearing orders
+group #LightBlue transaction
+CS -> settlement_order_tab: create
+CS <- settlement_order_tab: ok
+CS -> clearing_order_tab: update clearing orders with settlement_order_id
+CS <- clearing_order_tab: ok
+CS -> settlement_clearing_mapping_tab: batch insert mapping
+CS <- settlement_clearing_mapping_tab: ok
+end group
+end loop
+
+CS -> pending_settlement_target_tab: delete
+CS <- pending_settlement_target_tab: ok
+
+loop for each settlement order
+CS -> CS: do settle
+end loop
+
+end loop
+
+@enduml

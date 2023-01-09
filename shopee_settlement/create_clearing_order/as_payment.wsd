@@ -1,0 +1,34 @@
+@startuml
+autonumber
+
+title create clearing order
+
+participant AS as AS
+participant CS as CS
+database clearing_order_gid_tab
+database clearing_reference_mapping_tab
+database clearing_order_tab
+
+AS -> CS : create clearing order (oder_complete_time)
+CS -> clearing_order_gid_tab: get new gid
+CS <- clearing_order_gid_tab: gid
+CS --> CS: new clearing order ID
+
+group #LightBlue transaction
+CS -> clearing_reference_mapping_tab: insert mapping
+CS <- clearing_reference_mapping_tab: insert mapping result
+
+alt mapping existed error
+AS <- CS: existed
+end alt
+
+CS -> clearing_order_tab: insert
+CS <- clearing_order_tab: insert result
+alt clearing order existed error
+AS <- CS: existed
+end alt
+
+AS <- CS : created
+end group
+
+@enduml

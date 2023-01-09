@@ -1,0 +1,38 @@
+@startuml
+autonumber
+
+title trigger clearing
+
+participant CS as CS
+database clearing_order_tab
+database failed_clearing_order_tab
+
+CS -> clearing_order_tab: find orders to clear
+note over clearing_order_tab
+SELECT
+    *
+FROM
+    clearing_order_tab recent 7 day shards
+WHERE
+    create_time >= time.time() - 300 seconds - 120 * 60 seconds AND
+    create_time < time.time() - 300 seconds AND
+    clearing_entity_id NOT IN (a, b) AND
+    clearing_entity_id IN (c, d) AND
+    order_type NOT IN (xx, yy) AND
+    statue IN (init, accounted_processing, accounted_complete)
+
+end note
+CS <- clearing_order_tab: clearing orders
+
+loop for each clearing order
+
+CS -> CS: do clearing
+
+alt do clearing error
+CS -> failed_clearing_order_tab: create
+CS <- failed_clearing_order_tab: ok
+end
+
+end loop
+
+@enduml

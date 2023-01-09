@@ -53,4 +53,5 @@ note left: get_node_type
 s -> c: 'hostname'
 c --> c: MASTER if 'hostname' == my hostname else SLAVE
 
+note over c:  https://github.com/tony-yin/etcd_watcher/blob/master/etcd_watcher/etcd_watcher.py
 @enduml

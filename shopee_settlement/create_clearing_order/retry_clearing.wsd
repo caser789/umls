@@ -1,0 +1,29 @@
+@startuml
+autonumber
+
+title retry clearing
+
+participant CS as CS
+database failed_clearing_order_tab
+
+CS -> failed_clearing_order_tab: get failed clearing orders
+note over failed_clearing_order_tab
+SELECT
+    *
+FROM
+    failed_clearing_order_tab
+WHERE
+    create_time < time.time() - 300s - 120 * 60 s AND
+    create_time >= time.time() - 7 * 24 * 3600 s
+end note
+CS <- failed_clearing_order_tab: clearing orders
+
+loop for each clearing order
+CS --> CS: do clear
+alt do clear success
+CS -> failed_clearing_order_tab: delete failed clearing order
+CS <- failed_clearing_order_tab: ok
+end
+end loop
+
+@enduml
