@@ -1,0 +1,27 @@
+@startuml
+autonumber
+
+title retry payout
+
+participant CS as CS
+database payout_order_tab
+
+CS -> payout_order_tab: find un-finished payout orders
+note over payout_order_tab
+SELECT
+    *
+FROM
+    payout_order_tab
+WHERE
+    payout_trx_type = Non-Invoice AND
+    status NOT IN (complete, closed) AND
+    create_time <= now - 5 * 60s AND
+    create_time > now - 5 * 60s - 7 * 24 * 3600s
+end note
+CS <- payout_order_tab: payout orders
+
+loop for each payout order
+CS -> CS: do payout
+end loop
+
+@enduml

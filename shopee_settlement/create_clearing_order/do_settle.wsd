@@ -1,0 +1,54 @@
+@startuml
+autonumber
+
+title do settle
+
+participant CS as CS
+participant merchant_shared_service as MSS
+database settlement_order_tab
+database pending_payout_order_tab
+
+note over settlement_order_tab: init
+alt target is store
+CS -> MSS: get target store details
+CS <- MSS: wallet account
+else target is merchant or merchant host
+CS -> MSS: get target merchant/host details
+CS <- MSS: wallet account
+end
+
+CS -> settlement_order_tab: update status from init to processing\nsettlement_target_wallet_id\nsettlement_target_name
+note over settlement_order_tab: processing
+CS <- settlement_order_tab: ok
+
+CS -> MSS: get source store details
+CS <- MSS: use credit, max credit
+
+alt instant (amount = 0 or source account == dest account)
+CS -> MWE: create transaction settlement instant\nuse_main
+CS <- MWE: transaction id
+else positive amount
+CS -> MWE: try settlement positive sent\nnot_use_unsettle
+CS <- MWE: transaction id
+CS -> MWE: try settlement positive receive instant\nuse_main
+CS <- MWE: transaction id
+CS -> MWE: confirm settlement positive sent
+CS <- MWE: transaction id
+else negative amount
+CS -> MWE: try settlement negative sent\nuse_unsettle
+CS <- MWE: transaction id
+CS -> MWE: try settlement negative receive instant
+CS <- MWE: transaction id
+CS -> MWE: confirm settlement negative sent
+CS <- MWE: transaction id
+end
+
+group #LightBlue transaction
+CS -> settlement_order_tab: update status from processing to completed
+note over settlement_order_tab: completed
+CS <- settlement_order_tab: ok
+CS -> pending_payout_order_tab: insert
+CS <- pending_payout_order_tab: ok
+end group
+
+@enduml

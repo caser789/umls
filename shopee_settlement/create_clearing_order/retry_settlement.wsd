@@ -1,0 +1,26 @@
+@startuml
+autonumber
+
+title retry settlement
+
+participant CS as CS
+database settlement_order_tab
+
+CS -> settlement_order_tab: unfinished settlement orders
+note over settlement_order_tab
+SELECT
+    *
+FROM
+    settlement_order_tab
+WHERE
+    status not (compete, closed) AND
+    create_time < now - 5 * 60 s AND
+    order_complete_time >= now - 5 * 60 s - 7 * 24 * 3600 s
+end note
+CS <- settlement_order_tab: settlement orders
+
+loop for each settlement order
+CS -> CS: do settle
+end loop
+
+@enduml

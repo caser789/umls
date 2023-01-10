@@ -1,0 +1,149 @@
+@startuml
+autonumber
+
+title schedule payout
+
+participant CS as CS
+database pending_payout_order_tab
+database settlement_order_tab
+database pending_settlement_target_tab
+database failed_clearing_order_tab
+database cron_job_lock_tab
+database payout_order_tab
+database payout_entity_mapping_tab
+database payout_settlement_mapping_tab
+participant merchant_shared_service as MSS
+participant noti_shared_service as NSS
+
+CS -> pending_payout_order_tab: find pending payout orders
+note over pending_payout_order_tab
+SELECT
+    service_id, settlement_trx_type, settlement_target_type, settlement_target_id, settlement_wallet_id
+FROM
+    pending_payout_order_tab
+GROUP BY service_id, settlement_trx_type, settlement_target_type, settlement_target_id, settlement_wallet_id
+end note
+CS <- pending_payout_order_tab: pending payout orders
+
+loop for each payout order
+CS -> settlement_order_tab: count settlement orders not in final status of yesterday
+note over settlement_order_tab
+SELECT
+    count(*)
+FROM
+    settlement_order_tab
+WHERE
+	payout_order_id = 0 AND
+    status NOT IN (complete, closed) AND
+    service_id = AS AND
+    settlement_trx_type = Non-Invoice AND
+    settlement_target_id = x AND
+    settlement_target_type = y AND
+    settlement_target_wallet_id = z AND
+    create_time < today 0 time AND
+    create_time >= yesterday 0 time AND
+    settlement_cycle = not realtime
+end note
+CS <- settlement_order_tab: count
+CS -> CS: assert count of un-completed settlement orders == 0
+
+CS -> pending_settlement_target_tab: count un-created settlements
+note over pending_settlement_target_tab
+SELECT
+    count(*)
+FROM
+    pending_settlement_target_tab
+WHERE
+    service_id = AS AND
+    settlement_trx_type = Non-Invoice AND
+    settlement_target_id = x AND
+    settlement_target_type = y AND
+    planned_settlement_time < now
+end note
+CS <- pending_settlement_target_tab: count
+CS -> CS: assert count of un-created settlement orders == 0
+
+CS -> failed_clearing_order_tab: count failed clearing order
+note over failed_clearing_order_tab
+SELECT
+    count(*)
+FROM
+    failed_clearing_order_tab
+WHERE
+    service_id = AS AND
+    settlement_target_id = x AND
+    settlement_target_type = y AND
+    order_type IN (payment) AND
+    order_complete_time < today 0 time AND
+    order_complete_time >= yesterday 0 time
+end note
+CS <- failed_clearing_order_tab: failed clearing order count
+CS -> CS: assert count of failed clearing order = 0
+
+CS -> cron_job_lock_tab: insert(service_id,target_type,target_id,txn_type)
+CS <- cron_job_lock_tab: ok
+CS -> cron_job_lock_tab: select for update (service_id,target_type,target_id,txn_type)
+CS <- cron_job_lock_tab: ok
+
+CS -> pending_payout_order_tab: find settlement order ids
+note over pending_payout_order_tab
+SELECT
+    settlement_order_id
+FROM
+    pending_payout_order_tab
+WHERE
+    service_id = AS AND
+    settlement_trx_type = Non-Invoice AND
+    settlement_target_id = x AND
+    settlement_target_type = y AND
+    settlement_wallet_id = z
+end note
+CS <- pending_payout_order_tab:
+
+CS -> settlement_order_tab: find settlement orders
+CS <- settlement_order_tab: settlement orders
+
+CS -> CS: create payout order
+alt payout to store
+CS -> MSS: get_store_details
+else
+CS -> MSS: get_merchant_details
+end
+CS <- MSS: payout config
+
+alt payout option to bank
+CS -> MSS: get bank info
+CS <- MSS: swift code
+end
+
+alt option = No Payout
+group #LightBlue transaction
+CS -> pending_payout_order_tab: batch delete by settlement order ids
+CS <- pending_payout_order_tab: ok
+end group
+end
+
+group #LightBlue transaction
+CS -> payout_order_tab: insert
+CS <- payout_order_tab: ok
+CS -> payout_entity_mapping_tab: insert
+CS <- payout_entity_mapping_tab: ok
+CS -> pending_payout_order_tab: batch delete by settlement order ids
+CS <- pending_payout_order_tab: ok
+loop for each settlement order
+CS -> payout_settlement_mapping_tab: insert
+CS <- payout_settlement_mapping_tab: ok
+CS -> settlement_order_tab: write back payout_order_id
+CS <- settlement_order_tab: ok
+end loop
+end group
+
+CS -> NSS: notify merchants payout initiated
+
+alt payout option != No Payout
+CS -> CS: do payout
+end
+
+end loop
+
+@enduml

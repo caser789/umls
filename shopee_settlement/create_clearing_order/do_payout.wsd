@@ -1,0 +1,40 @@
+@startuml
+autonumber
+
+title do payout
+
+participant CS as CS
+database payout_order_tab
+
+note over payout_order_tab: init
+CS -> payout_order_tab: update status from init to processing
+CS <- payout_order_tab: ok
+note over payout_order_tab: processing
+
+alt settled payout amount == 0
+CS -> payout_order_tab: update status from processing to complete
+CS <- payout_order_tab: ok
+end
+
+alt payout option to bank
+CS -> MWS: create transaction
+CS <- MWS: transaction id
+alt fraud hit
+CS -> MSS: update payout mode to manual
+CS <- MSS:
+end
+
+CS -> payout_order_tab: update status from processing to pending_update
+CS <- payout_order_tab: ok
+note over payout_order_tab: pending_update
+
+MWS --> CS: update payout status
+CS -> MWS: query order status
+CS <- MWS: status is success
+CS -> payout_order_tab: update status from pending_update to complete
+CS <- payout_order_tab: ok
+note over payout_order_tab: complete
+MWS <-- CS: ok
+end
+
+@enduml
